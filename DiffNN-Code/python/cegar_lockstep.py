@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# cegar_lockstep.py — build {over,under}‑approximate .nnet files for                      
+# cegar_lockstep.py — build {over,under}‑approximate .nnet files 
+# should probably rename since it holds more than just lockstep                     
 
 import argparse, logging, sys, pathlib, itertools
 from copy import deepcopy
@@ -37,7 +38,8 @@ def split_pos_neg(W):
         if mask.any():            yield "pos", j, np.where(mask,  col, 0.) #using yield... how good is that?
         if (~mask).any():         yield "neg", j, np.where(~mask, col, 0.)
 
-def expand(net):
+def expand(net): 
+    """Expand the network to have pos/neg/increasing/decreasing columns."""
     sizes, Ws, Bs, buckets = [net["layerSizes"][0]], [], [], []
     incdec = downstream_signs(net["weights"])
     for l in range(net["numLayers"] - 1):
@@ -47,9 +49,11 @@ def expand(net):
             lab.append((pn, "inc" if incdec[l][j] > 0 else "dec"))
             cols.append(col[:, None])
             bias.append(0.)
-        Ws.append(np.hstack(cols)); Bs.append(np.asarray(bias, np.float32))
-        buckets.append(lab); sizes.append(len(bias))
-    Ws.append(net["weights"][-1].copy()); Bs.append(net["biases"][-1].copy())
+        Ws.append(np.hstack(cols)) 
+        Bs.append(np.asarray(bias, np.float32)) # bias vector for expanded layer (zeros)
+        buckets.append(lab) 
+        sizes.append(len(bias))
+    Ws.append(net["weights"][-1].copy()); Bs.append(net["biases"][-1].copy()) #original output layer is unchanged
     sizes.append(net["layerSizes"][-1])
     return sizes, Ws, Bs, buckets
 
@@ -85,8 +89,8 @@ def lockstep(netA, netB, mode="over"):
         changed = False
         for l in range(L):
             pair = next(((j, k) for j in range(len(buckA[l])-1)
-                                   for k in range(j+1, len(buckA[l]))
-                                   if buckA[l][j] == buckA[l][k]), None)
+                                for k in range(j+1, len(buckA[l]))
+                                if buckA[l][j] == buckA[l][k]), None)
             if not pair: continue
             j, k = pair
             WA[l], bA[l] = merge_cols(WA[l], bA[l], j, k, op)
@@ -104,11 +108,13 @@ def lockstep(netA, netB, mode="over"):
                     "weights": [w.tolist() for w in Ws],
                     "biases":  [b.tolist() for b in Bs]})
         return out
+    
     return pack(netA, szA, WA, bA), pack(netB, szB, WB, bB)
 
 
 # -------------------------------- INDICATOR Guided ---------------------
 # ---view secrtion 4.1  Generating an Initial Abstraction of the CEGAR paper
+# --- TODO this needs more work...
 
 def indicator_abstraction(net, P, Q, X, kind="over", verbose=False):
     net_bar = deepcopy(net)
